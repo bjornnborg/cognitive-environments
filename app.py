@@ -84,17 +84,6 @@ if uploaded_document is not None:
         st.warning("Nenhum rosto detectado na imagem.")
 
 # VERIFICAÇÃO DE IDENTIDADE COM SELFIE DA CÂMERA
-import streamlit as st
-import boto3
-from PIL import Image
-import io
-
-# Criação do cliente Rekognition
-aws_access_key_id = st.secrets["aws_access_key_id"]
-aws_secret_access_key = st.secrets["aws_secret_access_key"]
-
-rekognition_client = boto3.client('rekognition', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key, region_name='us-east-1')
-
 def compare_faces(image_bytes1, image_bytes2, threshold=80):
     try:
         if not isinstance(image_bytes1, bytes) or not isinstance(image_bytes2, bytes):
@@ -201,6 +190,16 @@ if 'imagem_documento_bytes' in st.session_state:
         faces_in_crowd = detect_faces_in_crowd(imagem_crowd_bytes)
         draw = ImageDraw.Draw(imagem_crowd)
 
+        # Threshold configurável
+        confidence_threshold = st.slider(
+            "Escolha o nível de confiança mínimo para considerar um match",
+            min_value=0,
+            max_value=100,
+            value=80,  # Valor inicial de confiança (80%)
+            step=1,
+            key="confidence-threshold-from-crowd"
+        )
+
         match_found = False
         for i, face_detail in enumerate(faces_in_crowd):
             bounding_box = face_detail['BoundingBox']
@@ -227,7 +226,7 @@ if 'imagem_documento_bytes' in st.session_state:
                 confidence = face_detail['Gender']['Confidence']  # Confiança da detecção de sexo
                 st.text(f"Sexo: {gender} (Confiança: {confidence:.2f}%)")
 
-            response_crowd = compare_faces(st.session_state.imagem_documento_bytes, face_bytes, threshold=80)
+            response_crowd = compare_faces(st.session_state.imagem_documento_bytes, face_bytes, threshold=confidence_threshold)
 
             # Desenhar a caixa de rosto e indicar se há match ou não
             if response_crowd[0]:
