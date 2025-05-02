@@ -54,6 +54,7 @@ def detect_document_face(image_bytes):
 
 # IDENTIFICAÇÃO DA FOTO DE UM DOCUMENTO
 st.title("Identificação de Rosto com Rekognition")
+st.subheader("Upload do documento")
 uploaded_document = st.file_uploader("Faça o upload da foto de um documento ou da foto em um documento", type=["jpg", "jpeg", "png"])
 
 if uploaded_document is not None:
@@ -65,22 +66,95 @@ if uploaded_document is not None:
     if has_face:
         st.success("Rosto encontrado na imagem")
         for i, face in enumerate(face_details):
-            st.write(f"Rosto {i+1}:")
-            st.write(f"Idade estimada: {face['AgeRange']['Low']} - {face['AgeRange']['High']} anos")
-            st.write(f"Emoções detectadas: {[emotion['Type'] for emotion in face['Emotions']]}")
+            st.text(f"Rosto {i+1}:")
+            if 'Gender' in face:
+                gender = face['Gender']['Value']  # 'Male' ou 'Female'
+                confidence = face['Gender']['Confidence']  # Confiança da detecção de sexo
+                st.text(f"Sexo: {gender} (Confiança: {confidence:.2f}%)")
+
+            st.text(f"Idade estimada: {face['AgeRange']['Low']} - {face['AgeRange']['High']} anos")
+            # st.text(f"Emoções detectadas: {[emotion['Type'] for emotion in face['Emotions']]}")
             emotions = sorted(face['Emotions'], key=lambda x: x['Confidence'], reverse=True)
             most_confident_emotion = emotions[0]
-            st.write(f"Emoção predominante: {most_confident_emotion['Type']}, Confiança: {most_confident_emotion['Confidence']:.2f}%")
+            st.text(f"Emoção predominante: {most_confident_emotion['Type']} (Confiança: {most_confident_emotion['Confidence']:.2f}%)")
 
             # Armazena a foto para que ela seja usada na comparação dos outros passos
             st.session_state.imagem_documento_bytes = imagem_documento_bytes
     else:
         st.warning("Nenhum rosto detectado na imagem.")
 
+# VERIFICAÇÃO DE IDENTIDADE COM SELFIE DA CÂMERA
+def compare_faces(image_bytes1, image_bytes2, threshold=80):
+    try:
+        if not isinstance(image_bytes1, bytes) or not isinstance(image_bytes2, bytes):
+            raise ValueError("Ambos os parâmetros devem ser do tipo 'bytes'.")
 
-# VERIFICAÇÃO DE IDENTIDADE COM A SELFIE
+        response = rekognition_client.compare_faces(
+            SourceImage={'Bytes': image_bytes1},
+            TargetImage={'Bytes': image_bytes2},
+            SimilarityThreshold=threshold
+        )
+
+        if len(response['FaceMatches']) > 0:
+            return True, response['FaceMatches']
+        else:
+            return False, None
+    except Exception as e:
+        st.error(f"Erro ao comparar as imagens: {str(e)}")
+        return False, None
+
+
+# VERIFICAÇÃO DE IDENTIDADE COM SELFIE DA CÂMERA
 if 'imagem_documento_bytes' in st.session_state:
-    st.write("Verificação de identidade")
+    st.subheader("Verificação de identidade - Tire uma selfie!")
+
+    # Checkbox para ativar a câmera
+    enable_camera = st.checkbox("Habilitar câmera")
+
+    # Quando a câmera estiver habilitada, o usuário pode tirar a selfie
+    selfie = None
+    if enable_camera:
+        selfie = st.camera_input("Tire uma foto")
+
+    # Verificar se a selfie foi tirada
+    if selfie is not None:
+        st.write("A selfie foi tirada e armazenada!")
+
+        # Armazenar os bytes da selfie no session_state para persistência
+        st.session_state.imagem_selfie_camera = selfie.getvalue()
+
+        # Exibir a selfie capturada
+        imagem_selfie_camera = Image.open(io.BytesIO(st.session_state.imagem_selfie_camera))
+        st.image(imagem_selfie_camera, caption="Selfie Capturada", use_container_width=True)
+
+        # Obter os bytes da selfie para a comparação
+        imagem_selfie_camera_bytes = st.session_state.imagem_selfie_camera
+
+        # Threshold configurável
+        confidence_threshold = st.slider(
+            "Escolha o nível de confiança mínimo para considerar um match",
+            min_value=0,
+            max_value=100,
+            value=80,  # Valor inicial de confiança (80%)
+            step=1,
+            key="confidence-threshold-selfie-from-camera"
+        )
+
+        # Comparar a selfie com a imagem de documento
+        match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_camera_bytes, threshold=confidence_threshold)
+
+        if match_found:
+            st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
+        else:
+            st.error("Identidade não confirmada.")
+    else:
+        st.write("Nenhuma selfie foi tirada ainda.")
+
+
+
+# VERIFICAÇÃO DE IDENTIDADE COM SELFIE DE ARQUIVO
+if 'imagem_documento_bytes' in st.session_state:
+    st.subheader("Verificação de identidade - Faça o upload de uma selfie")
     uploaded_selfie = st.file_uploader("Faça o upload de uma foto do seu rosto", type=["jpg", "jpeg", "png"])
 
     if uploaded_selfie is not None:
@@ -94,17 +168,18 @@ if 'imagem_documento_bytes' in st.session_state:
             min_value=0,
             max_value=100,
             value=80,  # Valor inicial de confiança (80%)
-            step=1
+            step=1,
+            key="confidence-threshold-selfie-from-file"
         )
         match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_bytes, threshold=confidence_threshold)
         if match_found:
             st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
         else:
-            st.warning("Identidade não confirmada.")
+            st.error("Identidade não confirmada.")
 
 # ENCONTRANDO A PESSOA ENTRE VÁRIAS OUTRAS
 if 'imagem_documento_bytes' in st.session_state:
-    st.write("Encontrar na multidão")
+    st.subheader("Encontrar na multidão")
     uploaded_crowd = st.file_uploader("Faça o upload de uma foto com várias pessoas", type=["jpg", "jpeg", "png"])
     if uploaded_crowd is not None:
         imagem_crowd = Image.open(uploaded_crowd)
@@ -115,8 +190,18 @@ if 'imagem_documento_bytes' in st.session_state:
         faces_in_crowd = detect_faces_in_crowd(imagem_crowd_bytes)
         draw = ImageDraw.Draw(imagem_crowd)
 
+        # Threshold configurável
+        confidence_threshold = st.slider(
+            "Escolha o nível de confiança mínimo para considerar um match",
+            min_value=0,
+            max_value=100,
+            value=80,  # Valor inicial de confiança (80%)
+            step=1,
+            key="confidence-threshold-from-crowd"
+        )
+
         match_found = False
-        for face_detail in faces_in_crowd:
+        for i, face_detail in enumerate(faces_in_crowd):
             bounding_box = face_detail['BoundingBox']
 
             # Calcular as coordenadas de recorte
@@ -134,47 +219,33 @@ if 'imagem_documento_bytes' in st.session_state:
                 face_image.save(byte_io, format='JPEG')
                 face_bytes = byte_io.getvalue()
 
-            response_crowd = compare_faces(st.session_state.imagem_documento_bytes, face_bytes, threshold=80)
+            st.markdown(f"<h4>Analisando face {i+1}</h4>", unsafe_allow_html=True)
+            st.image(face_image, caption=f"Face {i+1}", width=50)
+            if 'Gender' in face_detail:
+                gender = face_detail['Gender']['Value']  # 'Male' ou 'Female'
+                confidence = face_detail['Gender']['Confidence']  # Confiança da detecção de sexo
+                st.text(f"Sexo: {gender} (Confiança: {confidence:.2f}%)")
+
+            response_crowd = compare_faces(st.session_state.imagem_documento_bytes, face_bytes, threshold=confidence_threshold)
 
             # Desenhar a caixa de rosto e indicar se há match ou não
             if response_crowd[0]:
                 # Se houver match
                 draw.rectangle([left, top, right, bottom], outline="green", width=5)
                 match_found = True
+                similarity = response_crowd[1][0]['Similarity']
+                st.success(f"Match! Confiança para essa face: {response_crowd[1][0]['Similarity']:.2f}%")
+
+
             else:
                 # Se não houver match
                 draw.rectangle([left, top, right, bottom], outline="red", width=5)
 
+
         if match_found:
             st.success("Encontramos um match na multidão!")
         else:
-            st.warning("Nenhuma correspondência encontrada na multidão.")
+            st.error("Nenhuma correspondência encontrada na multidão.")
 
         # Exibir a imagem com os retângulos
         st.image(imagem_crowd, caption="Foto da Multidão - Resultados da Comparação", use_container_width=True)
-
-if 'imagem_documento_bytes' in st.session_state:
-    st.write("Verificação de identidade - Tire uma selfie!")
-    selfie = st.camera_input("Tire uma foto!")
-
-    if selfie is not None:
-        imagem_selfie_camera = Image.open(selfie)
-        st.image(imagem_selfie_camera, caption="Selfie Capturada", use_container_width=True)
-        imagem_selfie_camera_bytes = selfie.getvalue()
-
-        # Threshold configurável
-        confidence_threshold = st.slider(
-            "Escolha o nível de confiança mínimo para considerar um match",
-            min_value=0,
-            max_value=100,
-            value=80,  # Valor inicial de confiança (80%)
-            step=1
-        )
-
-        # Comparar a selfie com a imagem de documento
-        match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_camera_bytes, threshold=confidence_threshold)
-
-        if match_found:
-            st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
-        else:
-            st.warning("Identidade não confirmada.")
