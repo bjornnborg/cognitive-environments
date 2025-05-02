@@ -66,12 +66,17 @@ if uploaded_document is not None:
     if has_face:
         st.success("Rosto encontrado na imagem")
         for i, face in enumerate(face_details):
-            st.write(f"Rosto {i+1}:")
-            st.write(f"Idade estimada: {face['AgeRange']['Low']} - {face['AgeRange']['High']} anos")
-            st.write(f"Emoções detectadas: {[emotion['Type'] for emotion in face['Emotions']]}")
+            st.text(f"Rosto {i+1}:")
+            if 'Gender' in face:
+                gender = face['Gender']['Value']  # 'Male' ou 'Female'
+                confidence = face['Gender']['Confidence']  # Confiança da detecção de sexo
+                st.text(f"Sexo: {gender} (Confiança: {confidence:.2f}%)")
+
+            st.text(f"Idade estimada: {face['AgeRange']['Low']} - {face['AgeRange']['High']} anos")
+            st.text(f"Emoções detectadas: {[emotion['Type'] for emotion in face['Emotions']]}")
             emotions = sorted(face['Emotions'], key=lambda x: x['Confidence'], reverse=True)
             most_confident_emotion = emotions[0]
-            st.write(f"Emoção predominante: {most_confident_emotion['Type']}, Confiança: {most_confident_emotion['Confidence']:.2f}%")
+            st.text(f"Emoção predominante: {most_confident_emotion['Type']} (Confiança: {most_confident_emotion['Confidence']:.2f}%)")
 
             # Armazena a foto para que ela seja usada na comparação dos outros passos
             st.session_state.imagem_documento_bytes = imagem_documento_bytes
@@ -215,8 +220,12 @@ if 'imagem_documento_bytes' in st.session_state:
                 face_image.save(byte_io, format='JPEG')
                 face_bytes = byte_io.getvalue()
 
-            st.write(f"Analisando face {i+1}")
+            st.markdown(f"<h4>Analisando face {i+1}</h4>", unsafe_allow_html=True)
             st.image(face_image, caption=f"Face {i+1}", width=50)
+            if 'Gender' in face_detail:
+                gender = face_detail['Gender']['Value']  # 'Male' ou 'Female'
+                confidence = face_detail['Gender']['Confidence']  # Confiança da detecção de sexo
+                st.text(f"Sexo: {gender} (Confiança: {confidence:.2f}%)")
 
             response_crowd = compare_faces(st.session_state.imagem_documento_bytes, face_bytes, threshold=80)
 
