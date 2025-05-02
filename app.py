@@ -54,6 +54,7 @@ def detect_document_face(image_bytes):
 
 # IDENTIFICAÇÃO DA FOTO DE UM DOCUMENTO
 st.title("Identificação de Rosto com Rekognition")
+st.subheader("Upload do documento")
 uploaded_document = st.file_uploader("Faça o upload da foto de um documento ou da foto em um documento", type=["jpg", "jpeg", "png"])
 
 if uploaded_document is not None:
@@ -196,7 +197,7 @@ if 'imagem_documento_bytes' in st.session_state:
         draw = ImageDraw.Draw(imagem_crowd)
 
         match_found = False
-        for face_detail in faces_in_crowd:
+        for i, face_detail in enumerate(faces_in_crowd):
             bounding_box = face_detail['BoundingBox']
 
             # Calcular as coordenadas de recorte
@@ -214,6 +215,9 @@ if 'imagem_documento_bytes' in st.session_state:
                 face_image.save(byte_io, format='JPEG')
                 face_bytes = byte_io.getvalue()
 
+            st.write(f"Analisando face {i+1}")
+            st.image(face_image, caption=f"Face {i+1}", width=50)
+
             response_crowd = compare_faces(st.session_state.imagem_documento_bytes, face_bytes, threshold=80)
 
             # Desenhar a caixa de rosto e indicar se há match ou não
@@ -221,9 +225,14 @@ if 'imagem_documento_bytes' in st.session_state:
                 # Se houver match
                 draw.rectangle([left, top, right, bottom], outline="green", width=5)
                 match_found = True
+                similarity = response_crowd[1][0]['Similarity']
+                st.success(f"Match! Confiança para essa face: {response_crowd[1][0]['Similarity']:.2f}%")
+
+
             else:
                 # Se não houver match
                 draw.rectangle([left, top, right, bottom], outline="red", width=5)
+
 
         if match_found:
             st.success("Encontramos um match na multidão!")
