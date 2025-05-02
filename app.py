@@ -152,3 +152,29 @@ if 'imagem_documento_bytes' in st.session_state:
 
         # Exibir a imagem com os retângulos
         st.image(imagem_crowd, caption="Foto da Multidão - Resultados da Comparação", use_container_width=True)
+
+if 'imagem_documento_bytes' in st.session_state:
+    st.write("Verificação de identidade - Tire uma selfie!")
+    selfie = st.camera_input("Tire uma foto!")
+
+    if selfie is not None:
+        imagem_selfie_camera = Image.open(selfie)
+        st.image(imagem_selfie_camera, caption="Selfie Capturada", use_container_width=True)
+        imagem_selfie_camera_bytes = selfie.getvalue()
+
+        # Threshold configurável
+        confidence_threshold = st.slider(
+            "Escolha o nível de confiança mínimo para considerar um match",
+            min_value=0,
+            max_value=100,
+            value=80,  # Valor inicial de confiança (80%)
+            step=1
+        )
+
+        # Comparar a selfie com a imagem de documento
+        match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_camera_bytes, threshold=confidence_threshold)
+
+        if match_found:
+            st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
+        else:
+            st.warning("Identidade não confirmada.")
