@@ -84,7 +84,7 @@ if 'imagem_documento_bytes' in st.session_state:
             value=80,  # Valor inicial de confiança (80%)
             step=1
         )
-        match_found, face_matches = compare_faces(st.session_state.image1_bytes, imagem_selfie_bytes, threshold=confidence_threshold)
+        match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_bytes, threshold=confidence_threshold)
         if match_found:
             st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
         else:
