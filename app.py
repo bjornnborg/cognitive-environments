@@ -77,10 +77,89 @@ if uploaded_document is not None:
     else:
         st.warning("Nenhum rosto detectado na imagem.")
 
+# VERIFICAÇÃO DE IDENTIDADE COM SELFIE DA CÂMERA
+import streamlit as st
+import boto3
+from PIL import Image
+import io
 
-# VERIFICAÇÃO DE IDENTIDADE COM A SELFIE
+# Criação do cliente Rekognition
+aws_access_key_id = st.secrets["aws_access_key_id"]
+aws_secret_access_key = st.secrets["aws_secret_access_key"]
+
+rekognition_client = boto3.client('rekognition', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key, region_name='us-east-1')
+
+def compare_faces(image_bytes1, image_bytes2, threshold=80):
+    try:
+        if not isinstance(image_bytes1, bytes) or not isinstance(image_bytes2, bytes):
+            raise ValueError("Ambos os parâmetros devem ser do tipo 'bytes'.")
+
+        response = rekognition_client.compare_faces(
+            SourceImage={'Bytes': image_bytes1},
+            TargetImage={'Bytes': image_bytes2},
+            SimilarityThreshold=threshold
+        )
+
+        if len(response['FaceMatches']) > 0:
+            return True, response['FaceMatches']
+        else:
+            return False, None
+    except Exception as e:
+        st.error(f"Erro ao comparar as imagens: {str(e)}")
+        return False, None
+
+
+# VERIFICAÇÃO DE IDENTIDADE COM SELFIE DA CÂMERA
 if 'imagem_documento_bytes' in st.session_state:
-    st.write("Verificação de identidade")
+    st.subheader("Verificação de identidade - Tire uma selfie!")
+
+    # Checkbox para ativar a câmera
+    enable_camera = st.checkbox("Habilitar câmera")
+
+    # Quando a câmera estiver habilitada, o usuário pode tirar a selfie
+    selfie = None
+    if enable_camera:
+        selfie = st.camera_input("Tire uma foto")
+
+    # Verificar se a selfie foi tirada
+    if selfie is not None:
+        st.write("A selfie foi tirada e armazenada!")
+
+        # Armazenar os bytes da selfie no session_state para persistência
+        st.session_state.imagem_selfie_camera = selfie.getvalue()
+
+        # Exibir a selfie capturada
+        imagem_selfie_camera = Image.open(io.BytesIO(st.session_state.imagem_selfie_camera))
+        st.image(imagem_selfie_camera, caption="Selfie Capturada", use_container_width=True)
+
+        # Obter os bytes da selfie para a comparação
+        imagem_selfie_camera_bytes = st.session_state.imagem_selfie_camera
+
+        # Threshold configurável
+        confidence_threshold = st.slider(
+            "Escolha o nível de confiança mínimo para considerar um match",
+            min_value=0,
+            max_value=100,
+            value=80,  # Valor inicial de confiança (80%)
+            step=1,
+            key="confidence-threshold-selfie-from-camera"
+        )
+
+        # Comparar a selfie com a imagem de documento
+        match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_camera_bytes, threshold=confidence_threshold)
+
+        if match_found:
+            st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
+        else:
+            st.error("Identidade não confirmada.")
+    else:
+        st.write("Nenhuma selfie foi tirada ainda.")
+
+
+
+# VERIFICAÇÃO DE IDENTIDADE COM SELFIE DE ARQUIVO
+if 'imagem_documento_bytes' in st.session_state:
+    st.subheader("Verificação de identidade - Faça o upload de uma selfie")
     uploaded_selfie = st.file_uploader("Faça o upload de uma foto do seu rosto", type=["jpg", "jpeg", "png"])
 
     if uploaded_selfie is not None:
@@ -94,17 +173,18 @@ if 'imagem_documento_bytes' in st.session_state:
             min_value=0,
             max_value=100,
             value=80,  # Valor inicial de confiança (80%)
-            step=1
+            step=1,
+            key="confidence-threshold-selfie-from-file"
         )
         match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_bytes, threshold=confidence_threshold)
         if match_found:
             st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
         else:
-            st.warning("Identidade não confirmada.")
+            st.error("Identidade não confirmada.")
 
 # ENCONTRANDO A PESSOA ENTRE VÁRIAS OUTRAS
 if 'imagem_documento_bytes' in st.session_state:
-    st.write("Encontrar na multidão")
+    st.subheader("Encontrar na multidão")
     uploaded_crowd = st.file_uploader("Faça o upload de uma foto com várias pessoas", type=["jpg", "jpeg", "png"])
     if uploaded_crowd is not None:
         imagem_crowd = Image.open(uploaded_crowd)
@@ -148,33 +228,7 @@ if 'imagem_documento_bytes' in st.session_state:
         if match_found:
             st.success("Encontramos um match na multidão!")
         else:
-            st.warning("Nenhuma correspondência encontrada na multidão.")
+            st.error("Nenhuma correspondência encontrada na multidão.")
 
         # Exibir a imagem com os retângulos
         st.image(imagem_crowd, caption="Foto da Multidão - Resultados da Comparação", use_container_width=True)
-
-if 'imagem_documento_bytes' in st.session_state:
-    st.write("Verificação de identidade - Tire uma selfie!")
-    selfie = st.camera_input("Tire uma foto!")
-
-    if selfie is not None:
-        imagem_selfie_camera = Image.open(selfie)
-        st.image(imagem_selfie_camera, caption="Selfie Capturada", use_container_width=True)
-        imagem_selfie_camera_bytes = selfie.getvalue()
-
-        # Threshold configurável
-        confidence_threshold = st.slider(
-            "Escolha o nível de confiança mínimo para considerar um match",
-            min_value=0,
-            max_value=100,
-            value=80,  # Valor inicial de confiança (80%)
-            step=1
-        )
-
-        # Comparar a selfie com a imagem de documento
-        match_found, face_matches = compare_faces(st.session_state.imagem_documento_bytes, imagem_selfie_camera_bytes, threshold=confidence_threshold)
-
-        if match_found:
-            st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
-        else:
-            st.warning("Identidade não confirmada.")
