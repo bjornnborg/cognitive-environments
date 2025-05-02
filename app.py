@@ -73,7 +73,7 @@ if uploaded_document is not None:
                 st.text(f"Sexo: {gender} (Confiança: {confidence:.2f}%)")
 
             st.text(f"Idade estimada: {face['AgeRange']['Low']} - {face['AgeRange']['High']} anos")
-            st.text(f"Emoções detectadas: {[emotion['Type'] for emotion in face['Emotions']]}")
+            # st.text(f"Emoções detectadas: {[emotion['Type'] for emotion in face['Emotions']]}")
             emotions = sorted(face['Emotions'], key=lambda x: x['Confidence'], reverse=True)
             most_confident_emotion = emotions[0]
             st.text(f"Emoção predominante: {most_confident_emotion['Type']} (Confiança: {most_confident_emotion['Confidence']:.2f}%)")
