@@ -11,6 +11,22 @@ rekognition_client = boto3.client('rekognition', aws_access_key_id=aws_access_ke
 
 #st.write("hello world!!!")
 
+def compare_faces(image_image_bytes, target_image_bytes, threshold=80):
+    try:
+        response = rekognition_client.compare_faces(
+            SourceImage={'Bytes': image_image_bytes},
+            TargetImage={'Bytes': target_image_bytes},
+            SimilarityThreshold=threshold
+        )
+
+        if len(response['FaceMatches']) > 0:
+            return True, response['FaceMatches']
+        else:
+            return False, None
+    except Exception as e:
+        st.error(f"Erro ao comparar as imagens: {str(e)}")
+        return False, None
+
 
 def detect_document_face(image_bytes):
     try:
@@ -27,12 +43,13 @@ def detect_document_face(image_bytes):
 
 # IDENTIFICAÇÃO DA FOTO DE UM DOCUMENTO
 st.title("Identificação de Rosto com Rekognition")
-uploaded_file = st.file_uploader("Faça o upload da foto de um documento ou da foto em um documento", type=["jpg", "jpeg", "png"])
+uploaded_document = st.file_uploader("Faça o upload da foto de um documento ou da foto em um documento", type=["jpg", "jpeg", "png"])
 
-if uploaded_file is not None:
-    imagem_documento = Image.open(uploaded_file)
+if uploaded_document is not None:
+    imagem_documento = Image.open(uploaded_document)
     st.image(imagem_documento, caption="Imagem recebida", use_container_width=True)
-    imagem_documento_bytes = uploaded_file.getvalue()
+    imagem_documento_bytes = uploaded_document.getvalue()
+
     has_face, face_details = detect_document_face(imagem_documento_bytes)
     if has_face:
         st.success("Rosto encontrado na imagem")
@@ -43,8 +60,35 @@ if uploaded_file is not None:
             emotions = sorted(face['Emotions'], key=lambda x: x['Confidence'], reverse=True)
             most_confident_emotion = emotions[0]
             st.write(f"Emoção predominante: {most_confident_emotion['Type']}, Confiança: {most_confident_emotion['Confidence']:.2f}%")
+
+            # Armazena a foto para que ela seja usada na comparação dos outros passos
+            st.session_state.imagem_documento_bytes = imagem_documento_bytes
     else:
         st.warning("Nenhum rosto detectado na imagem.")
+
+
+if 'imagem_documento_bytes' in st.session_state:
+    st.write("Verificação de identidade")
+    uploaded_selfie = st.file_uploader("Faça o upload de uma foto do seu rosto", type=["jpg", "jpeg", "png"])
+
+    if uploaded_selfie is not None:
+        imagem_selfie = Image.open(uploaded_selfie)
+        st.image(imagem_selfie, caption="Foto de verificação carregada", use_container_width=True)
+        imagem_selfie_bytes = uploaded_selfie.getvalue()
+
+        # Threshold configurável
+        confidence_threshold = st.slider(
+            "Escolha o nível de confiança mínimo para considerar um match",
+            min_value=0,
+            max_value=100,
+            value=80,  # Valor inicial de confiança (80%)
+            step=1
+        )
+        match_found, face_matches = compare_faces(st.session_state.image1_bytes, imagem_selfie_bytes, threshold=confidence_threshold)
+        if match_found:
+            st.success(f"Identidade verificada com sucesso! Similaridade: {face_matches[0]['Similarity']:.2f}%")
+        else:
+            st.warning("Identidade não confirmada.")
 
 
 
